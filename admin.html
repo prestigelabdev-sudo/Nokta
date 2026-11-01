@@ -46,6 +46,27 @@ label{display:grid;gap:6px;font-size:13px;color:var(--mute)}
 .toast{position:fixed;left:50%;bottom:calc(env(safe-area-inset-bottom,0px) + 20px);transform:translateX(-50%);background:#111;border:1px solid var(--gold2);padding:12px 18px;border-radius:12px;z-index:90;font-size:14px;display:none;max-width:90vw}
 .err{color:var(--red);font-size:14px;min-height:18px}
 .hint{color:var(--mute);font-size:13px;line-height:1.5}
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:12px}
+.stat{border:1px solid var(--line);border-radius:12px;padding:8px 6px;text-align:center;background:#070707}
+.stat b{display:block;font-family:'Bebas Neue';font-weight:400;font-size:26px;color:var(--gold);line-height:1}
+.stat small{color:var(--mute);font-size:11px}
+.tools{position:sticky;top:0;z-index:5;background:#000;padding:6px 0 10px;display:grid;gap:8px}
+.chips{display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;padding-bottom:2px}
+.chips::-webkit-scrollbar{display:none}
+.chip{flex:none;min-height:34px;padding:0 14px;border-radius:99px;border:1px solid var(--line);color:var(--mute);font-size:13px}
+.chip[aria-pressed=true]{background:var(--gold);color:#140e02;border-color:var(--gold);font-weight:600}
+.row{padding:8px}
+.row .main{flex:1;min-width:0;display:flex;gap:12px;align-items:center;text-align:left}
+.side{display:flex;align-items:center;gap:6px;flex:none}
+.sw{width:46px;height:28px;border-radius:99px;background:#2a2212;position:relative;flex:none;transition:background .2s}
+.sw::after{content:"";position:absolute;top:3px;left:3px;width:22px;height:22px;border-radius:50%;background:#8d8878;transition:transform .2s,background .2s}
+.sw.on{background:var(--gold2)}.sw.on::after{transform:translateX(18px);background:#fff}
+.mv{display:grid;gap:2px}
+.mv button{width:34px;height:26px;border-radius:7px;border:1px solid var(--line);font-size:11px;color:var(--mute)}
+.mv button:disabled{opacity:.25}
+.live{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--mute)}
+.live i{width:8px;height:8px;border-radius:50%;background:#555}.live.ok i{background:#4cd97b;box-shadow:0 0 8px #4cd97b}
+.bar{height:4px;border-radius:4px;background:#1d1810;overflow:hidden;display:none}.bar i{display:block;height:100%;width:0;background:var(--gold);transition:width .15s}
 </style>
 </head>
 <body>
@@ -59,9 +80,11 @@ label{display:grid;gap:6px;font-size:13px;color:var(--mute)}
 </section>
 
 <section id="vApp" hidden>
-  <div class="top"><div><div class="logo">NOKTA</div><h2>Productos</h2></div>
+  <div class="top"><div><div class="logo">NOKTA</div><h2>Productos</h2><span class="live" id="live"><i></i><span>conectando…</span></span></div>
     <div style="display:flex;gap:8px"><button class="btn" id="new">Nuevo</button><button class="btn ghost" id="out">Salir</button></div></div>
-  <p class="hint" style="margin-bottom:12px">Toca un producto para editarlo. Los ocultos no aparecen en el catálogo. Se ordenan por el número “Orden”.</p>
+  <div class="stats"><div class="stat"><b id="s1">0</b><small>Productos</small></div><div class="stat"><b id="s2">0</b><small>Visibles</small></div><div class="stat"><b id="s3">0</b><small>Ocultos</small></div><div class="stat"><b id="s4">0</b><small>Sin foto</small></div></div>
+  <div class="tools"><input id="q" type="search" placeholder="Buscar producto…" autocomplete="off"><div class="chips" id="chips"></div></div>
+  <p class="hint" style="margin-bottom:12px">Toca un producto para editarlo, el interruptor para mostrarlo u ocultarlo en el catálogo y las flechas para cambiar el orden. Todo se actualiza en vivo.</p>
   <div class="list" id="list"></div>
 </section>
 </div>
@@ -77,6 +100,7 @@ label{display:grid;gap:6px;font-size:13px;color:var(--mute)}
       <button type="button" class="btn ghost" id="noImg">Quitar foto</button>
     </div>
   </div>
+  <div class="bar" id="pb"><i></i></div>
   <label>Nombre<input id="fn" required></label>
   <div class="two">
     <label>Precio (COP)<input id="fp" type="number" inputmode="numeric" min="0" step="500"></label>
@@ -86,7 +110,8 @@ label{display:grid;gap:6px;font-size:13px;color:var(--mute)}
   <label class="chk"><input id="fa" type="checkbox">Visible en el catálogo</label>
   <div class="err" id="ferr"></div>
   <button class="btn" id="save">Guardar</button>
-  <div class="two"><button type="button" class="btn ghost" id="cancel">Cancelar</button><button type="button" class="btn danger" id="del">Eliminar</button></div>
+  <div class="two"><button type="button" class="btn ghost" id="cancel">Cancelar</button><button type="button" class="btn ghost" id="dup">Duplicar</button></div>
+  <button type="button" class="btn danger" id="del">Eliminar</button>
 </form>
 <div class="toast" id="toast"></div>
 
@@ -96,20 +121,31 @@ var SUPABASE_KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsI
 var CLOUD_NAME="roqwoww1",UPLOAD_PRESET="Prestige"; // mismo Cloudinary de Prestige Lab
 var $=function(s){return document.getElementById(s)};
 var db=supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
-var rows=[],cur=null,imgUrl=null,newFile=null;
+var rows=[],cur=null,imgUrl=null,newFile=null,fcat="Todas",term="",chan=null,tm=null;
 function money(n){return "$ "+String(n).replace(/\B(?=(\d{3})+(?!\d))/g,".")}
 function toast(s){var t=$("toast");t.textContent=s;t.style.display="block";clearTimeout(t._h);t._h=setTimeout(function(){t.style.display="none"},2600)}
 function esc(s){return String(s).replace(/[&<>"]/g,function(c){return{"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]})}
+function norm(s){return String(s).toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g,"")}
 
 function show(on){$("vLogin").hidden=on;$("vApp").hidden=!on}
-db.auth.getSession().then(function(r){if(r.data.session){show(true);load()}else show(false)});
+function enter(){show(true);load();live()}
+db.auth.getSession().then(function(r){if(r.data.session)enter();else show(false)});
 $("go").onclick=function(){
   $("lerr").textContent="";
   db.auth.signInWithPassword({email:$("em").value.trim(),password:$("pw").value}).then(function(r){
     if(r.error){$("lerr").textContent="Correo o contraseña incorrectos.";return}
-    show(true);load()});
+    enter()});
 };
-$("out").onclick=function(){db.auth.signOut().then(function(){show(false)})};
+$("pw").onkeydown=function(e){if(e.key=="Enter")$("go").click()};
+$("out").onclick=function(){if(chan){db.removeChannel(chan);chan=null}db.auth.signOut().then(function(){show(false)})};
+
+/* ---- tiempo real ---- */
+function live(){
+  if(chan)return;
+  chan=db.channel("catalog").on("broadcast",{event:"changed"},function(){clearTimeout(tm);tm=setTimeout(load,250)})
+   .subscribe(function(st){var l=$("live");l.classList.toggle("ok",st=="SUBSCRIBED");l.lastChild.textContent=st=="SUBSCRIBED"?"en vivo":"reconectando…"});
+}
+document.addEventListener("visibilitychange",function(){if(!document.hidden&&!$("vApp").hidden)load()});
 
 function load(){
   db.from("products").select("*").order("sort",{ascending:true}).order("id",{ascending:true}).then(function(r){
@@ -117,13 +153,41 @@ function load(){
     rows=r.data;draw();
   });
 }
+function cats(){var o=["Todas"];rows.forEach(function(x){if(o.indexOf(x.category)<0)o.push(x.category)});return o}
+function view(){var t=norm(term);return rows.filter(function(x){return(fcat=="Todas"||x.category==fcat)&&(!t||norm(x.name).indexOf(t)>-1)})}
 function draw(){
-  $("list").innerHTML=rows.map(function(x){
+  var C=cats();if(C.indexOf(fcat)<0)fcat="Todas";
+  $("chips").innerHTML=C.map(function(c){return '<button class="chip" aria-pressed="'+(c==fcat)+'" data-c="'+esc(c)+'">'+esc(c)+'</button>'}).join("");
+  $("s1").textContent=rows.length;$("s2").textContent=rows.filter(function(x){return x.active}).length;
+  $("s3").textContent=rows.filter(function(x){return!x.active}).length;$("s4").textContent=rows.filter(function(x){return!x.image_url}).length;
+  var L=view();
+  $("list").innerHTML=L.map(function(x,i){
     var th=x.image_url?'<img class="th" src="'+esc(x.image_url)+'" alt="">':'<div class="th">'+esc(x.name.charAt(0))+'</div>';
-    return '<button class="row'+(x.active?'':' off')+'" data-id="'+x.id+'">'+th+'<div class="n"><b>'+esc(x.name)+'</b><small>'+esc(x.category)+(x.active?'':' · oculto')+'</small><br><em>'+money(x.price)+'</em></div></button>'}).join("")||'<p class="hint">Aún no hay productos. Toca “Nuevo”.</p>';
-  $("cats").innerHTML=Array.from(new Set(rows.map(function(x){return x.category}))).map(function(c){return '<option value="'+esc(c)+'">'}).join("");
+    return '<div class="row'+(x.active?'':' off')+'"><button class="main" data-id="'+x.id+'">'+th+'<div class="n"><b>'+esc(x.name)+'</b><small>'+esc(x.category)+(x.active?'':' · oculto')+'</small><br><em>'+money(x.price)+'</em></div></button>'+
+    '<div class="side"><button class="sw'+(x.active?' on':'')+'" data-t="'+x.id+'" role="switch" aria-checked="'+x.active+'" aria-label="Visible en el catálogo"></button>'+
+    '<div class="mv"><button data-mv="-1" data-id="'+x.id+'" aria-label="Subir"'+(i==0?' disabled':'')+'>▲</button><button data-mv="1" data-id="'+x.id+'" aria-label="Bajar"'+(i==L.length-1?' disabled':'')+'>▼</button></div></div></div>'}).join("")
+    ||'<p class="hint">'+(rows.length?"Nada coincide con la búsqueda.":"Aún no hay productos. Toca “Nuevo”.")+'</p>';
+  $("cats").innerHTML=C.slice(1).map(function(c){return '<option value="'+esc(c)+'">'}).join("");
 }
-$("list").onclick=function(e){var b=e.target.closest("[data-id]");if(b)edit(rows.filter(function(x){return x.id==b.dataset.id})[0])};
+$("q").oninput=function(){term=this.value;draw()};
+$("chips").onclick=function(e){var b=e.target.closest("[data-c]");if(b){fcat=b.dataset.c;draw()}};
+function byId(id){return rows.filter(function(x){return x.id==id})[0]}
+$("list").onclick=function(e){
+  var t=e.target.closest("[data-t]");
+  if(t){var x=byId(t.dataset.t);if(!x)return;x.active=!x.active;draw();
+    db.from("products").update({active:x.active}).eq("id",x.id).then(function(r){if(r.error){toast("No se pudo cambiar");load()}});return}
+  var m=e.target.closest("[data-mv]");
+  if(m){move(byId(m.dataset.id),+m.dataset.mv);return}
+  var b=e.target.closest(".main");if(b)edit(byId(b.dataset.id));
+};
+function move(x,d){
+  var L=view(),i=L.indexOf(x),y=L[i+d];if(!y)return;
+  var a=rows.indexOf(x),b=rows.indexOf(y);rows[a]=y;rows[b]=x;
+  var ch=[];rows.forEach(function(r,k){if(r.sort!==k+1){r.sort=k+1;ch.push(r)}});
+  draw();
+  Promise.all(ch.map(function(r){return db.from("products").update({sort:r.sort}).eq("id",r.id)})).then(function(rs){
+    if(rs.some(function(r){return r.error})){toast("No se pudo reordenar");load()}});
+}
 $("new").onclick=function(){edit(null)};
 
 function setPrev(){
@@ -133,16 +197,16 @@ function setPrev(){
   else p.outerHTML='<div id="prev" class="th">+</div>';
 }
 function open_(on){$("sh").classList.toggle("on",on);$("veil").classList.toggle("on",on);document.body.style.overflow=on?"hidden":""}
-function edit(x){
-  cur=x;newFile=null;imgUrl=x?x.image_url:null;$("file").value="";$("ferr").textContent="";
-  $("sht").textContent=x?"Editar producto":"Nuevo producto";
-  $("fn").value=x?x.name:"";$("fp").value=x?x.price:"";$("fc").value=x?x.category:"";
-  $("fo").value=x?x.sort:(rows.length?Math.max.apply(null,rows.map(function(r){return r.sort}))+1:1);
-  $("fa").checked=x?x.active:true;$("del").style.display=x?"":"none";
+function edit(x,dup){
+  cur=dup?null:x;newFile=null;imgUrl=x?x.image_url:null;$("file").value="";$("ferr").textContent="";
+  $("sht").textContent=dup?"Producto duplicado":x?"Editar producto":"Nuevo producto";
+  $("fn").value=x?x.name+(dup?" (copia)":""):"";$("fp").value=x?x.price:"";$("fc").value=x?x.category:(fcat!="Todas"?fcat:"");
+  $("fo").value=dup?(Math.max.apply(null,rows.map(function(r){return r.sort}))+1):x?x.sort:(rows.length?Math.max.apply(null,rows.map(function(r){return r.sort}))+1:1);
+  $("fa").checked=x?x.active:true;$("del").style.display=cur?"":"none";$("dup").style.display=cur?"":"none";
   setPrev();open_(true);
 }
+$("dup").onclick=function(){if(cur)edit(cur,true)};
 $("pickBtn").onclick=function(){$("file").click()};
-$("prev").onclick=function(){$("file").click()};
 document.addEventListener("click",function(e){if(e.target.id=="prev")$("file").click()});
 $("file").onchange=function(){newFile=this.files[0]||null;setPrev()};
 $("noImg").onclick=function(){newFile=null;imgUrl=null;$("file").value="";setPrev()};
@@ -150,31 +214,31 @@ $("cancel").onclick=$("veil").onclick=function(){open_(false)};
 
 function resize(f){return new Promise(function(ok,no){
   var im=new Image();im.onload=function(){
-    var s=Math.min(1,900/im.width),c=document.createElement("canvas");
+    var s=Math.min(1,900/Math.max(im.width,im.height)),c=document.createElement("canvas");
     c.width=Math.round(im.width*s);c.height=Math.round(im.height*s);
     c.getContext("2d").drawImage(im,0,0,c.width,c.height);
-    c.toBlob(function(b){b?ok(b):no()},"image/jpeg",.82)};
+    c.toBlob(function(b){b?ok(b):no()},"image/jpeg",.85)};
   im.onerror=no;im.src=URL.createObjectURL(f)})}
-function cloudUpload(blob){
+function cloudUpload(blob){return new Promise(function(ok,ko){
   var f=new FormData();f.append("file",blob);f.append("upload_preset",UPLOAD_PRESET);
   f.append("public_id","nokta_"+Date.now()+"_"+Math.random().toString(36).slice(2,6));f.append("tags","nokta");
-  return fetch("https://api.cloudinary.com/v1_1/"+CLOUD_NAME+"/image/upload",{method:"POST",body:f})
-    .then(function(r){return r.json().then(function(j){
-      if(!r.ok||!j.secure_url)throw new Error((j.error&&j.error.message)||"no se pudo subir la foto");
-      return j.secure_url.replace("/upload/","/upload/f_auto,q_auto,w_700/")})})}
+  var x=new XMLHttpRequest();x.open("POST","https://api.cloudinary.com/v1_1/"+CLOUD_NAME+"/image/upload");
+  x.upload.onprogress=function(e){if(e.lengthComputable)$("pb").firstChild.style.width=(e.loaded/e.total*100)+"%"};
+  x.onload=function(){var j={};try{j=JSON.parse(x.responseText)}catch(_){}
+    x.status<300&&j.secure_url?ok(j.secure_url.replace("/upload/","/upload/f_auto,q_auto,w_700/")):ko(new Error((j.error&&j.error.message)||"no se pudo subir la foto"))};
+  x.onerror=function(){ko(new Error("sin conexión"))};x.send(f)})}
 $("save").onclick=function(){
   var n=$("fn").value.trim(),p=parseInt($("fp").value,10),c=$("fc").value.trim()||"Otros";
   if(!n||isNaN(p)||p<0){$("ferr").textContent="Pon un nombre y un precio válido.";return}
   $("save").disabled=true;$("save").textContent="Guardando…";$("ferr").textContent="";
   var up=Promise.resolve(imgUrl);
-  if(newFile)up=resize(newFile).then(function(b){
-    return cloudUpload(b)}); 
+  if(newFile){$("pb").style.display="block";$("pb").firstChild.style.width="0";up=resize(newFile).then(cloudUpload)}
   up.then(function(url){
     var d={name:n,price:p,category:c,image_url:url||null,active:$("fa").checked,sort:parseInt($("fo").value,10)||0};
     return cur?db.from("products").update(d).eq("id",cur.id):db.from("products").insert(d)})
   .then(function(r){if(r.error)throw r.error;open_(false);toast("Guardado");load()})
   .catch(function(e){$("ferr").textContent="No se pudo guardar: "+(e.message||"error")})
-  .then(function(){$("save").disabled=false;$("save").textContent="Guardar"});
+  .then(function(){$("pb").style.display="none";$("save").disabled=false;$("save").textContent="Guardar"});
 };
 $("del").onclick=function(){
   if(!cur||!confirm("¿Eliminar “"+cur.name+"”? No se puede deshacer."))return;

@@ -9,6 +9,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <title>Nokta Night Supply · Catálogo</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌙</text></svg>">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Jost:wght@300;400;500;600&display=swap" rel="stylesheet">
 <style>
 :root{--bg:#000;--bg2:#070707;--line:#1d1810;--gold:#f2c14e;--gold2:#b8841f;--silver:#f1f3f7;--mute:#8d8878;--wa:#25d366}
@@ -181,18 +182,27 @@ $("send").onclick=function(){
   window.open("https://wa.me/"+PHONE+"?text="+encodeURIComponent(m),"_blank");
 };
 function msg(s){$("grid").innerHTML='<div class="empty" style="grid-column:1/-1">'+s+'</div>'}
+var first=true;
 function load(){
-  if(SUPABASE_URL.indexOf("PEGA")>-1){msg("Falta conectar el catálogo a Supabase.");return}
-  msg("Cargando catálogo…");
+  if(first)msg("Cargando catálogo…");
   fetch(SUPABASE_URL+"/rest/v1/products?select=id,name,price,category,image_url&active=eq.true&order=sort.asc,id.asc",{headers:{apikey:SUPABASE_KEY,Authorization:"Bearer "+SUPABASE_KEY}})
   .then(function(r){if(!r.ok)throw 0;return r.json()})
   .then(function(rows){
+    first=false;
     P=rows.map(function(r){return{id:r.id,n:r.name,p:r.price,c:r.category,i:r.image_url}});
     CATS=["Todos"];P.forEach(function(x){if(CATS.indexOf(x.c)<0)CATS.push(x.c)});
-    if(!P.length){msg("Pronto tendremos productos disponibles.");return}
-    drawTabs();drawGrid();
-  }).catch(function(){msg("No pudimos cargar el catálogo. Revisa tu conexión e intenta de nuevo.")});
+    if(CATS.indexOf(cat)<0)cat="Todos";
+    for(var k in cart)if(!find(k))delete cart[k];
+    if(!P.length){msg("Pronto tendremos productos disponibles.");drawTabs();drawCart();return}
+    drawTabs();drawGrid();drawCart();
+  }).catch(function(){if(first)msg("No pudimos cargar el catálogo. Revisa tu conexión e intenta de nuevo.")});
 }
+/* tiempo real: el admin avisa y el catálogo se refresca solo */
+var tm;function soon(){clearTimeout(tm);tm=setTimeout(load,250)}
+try{supabase.createClient(SUPABASE_URL,SUPABASE_KEY).channel("catalog").on("broadcast",{event:"changed"},soon).subscribe()}catch(e){}
+document.addEventListener("visibilitychange",function(){if(!document.hidden)load()});
+window.addEventListener("online",load);
+setInterval(load,60000); // respaldo por si se cae la conexión en vivo
 drawTabs();drawCart();load();
 </script>
 </body>
